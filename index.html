@@ -28,6 +28,7 @@ li .t{flex:1}li .t small{color:var(--muted);display:block}
 li.known .t b{color:var(--ok)}
 .small{padding:4px 8px;font-size:.8rem}
 .ex{margin-top:20px;padding-top:16px;border-top:1px solid var(--line);font-size:1rem;text-align:left;width:100%}
+.ex .hl{color:var(--accent);font-weight:600}
 .ex .ja{color:var(--muted);font-size:.9rem;margin-top:4px}
 .card .mean{font-size:1.6rem}
 li .t .ex{border:0;margin:6px 0 0;padding:0;font-size:.85rem}
@@ -97,7 +98,17 @@ function splitEx(t){const m=/^(.*?)\s*（(.*)）\s*$/s.exec(t||"");return m?{en:
 function exBlock(w){
   if(!$("showEx").checked||!w.example)return null;
   const {en,ja}=splitEx(w.example),d=document.createElement("div");d.className="ex";
-  const e=document.createElement("div");e.textContent=en;d.append(e);
+  const e=document.createElement("div");d.append(e);
+  let m=null;
+  for(const base of [w.word.trim(),w.word.trim().replace(/[ey]$/i,"")]){
+    if(!base)continue;
+    m=new RegExp("\\b"+base.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\w*","i").exec(en);
+    if(m)break;
+  }
+  if(m){
+    const h=document.createElement("span");h.className="hl";h.textContent=m[0];
+    e.append(en.slice(0,m.index),h,en.slice(m.index+m[0].length));
+  }else e.textContent=en;
   if(ja){const j=document.createElement("div");j.className="ja";j.textContent=ja;d.append(j)}
   return d;
 }
