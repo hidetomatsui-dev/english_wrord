@@ -27,6 +27,10 @@ li{background:var(--card);border:1px solid var(--line);border-radius:10px;paddin
 li .t{flex:1}li .t small{color:var(--muted);display:block}
 li.known .t b{color:var(--ok)}
 .small{padding:4px 8px;font-size:.8rem}
+.ex{margin-top:20px;padding-top:16px;border-top:1px solid var(--line);font-size:1rem;text-align:left;width:100%}
+.ex .ja{color:var(--muted);font-size:.9rem;margin-top:4px}
+.card .mean{font-size:1.6rem}
+li .t .ex{border:0;margin:6px 0 0;padding:0;font-size:.85rem}
 .empty{color:var(--muted);text-align:center;padding:32px 0}
 label.chk{display:flex;gap:6px;align-items:center;font-size:.9rem;color:var(--muted)}
 label.chk input{width:auto}
@@ -44,6 +48,7 @@ label.chk input{width:auto}
 <section id="study" class="panel active">
   <label class="chk"><input type="checkbox" id="hideKnown" checked> 覚えた単語を除く</label>
   <label class="chk"><input type="checkbox" id="reverse"> 表裏を逆にする(意味→単語)</label>
+  <label class="chk"><input type="checkbox" id="showEx" checked> 例文を表示する(訳つき)</label>
   <div class="meta"><span id="pos"></span><span id="stat"></span></div>
   <div class="card" id="card">単語を追加してください</div>
   <div class="row">
@@ -62,14 +67,17 @@ label.chk input{width:auto}
   <div class="form">
     <input id="w" placeholder="単語">
     <textarea id="m" rows="2" placeholder="意味・メモ"></textarea>
+    <textarea id="e" rows="2" placeholder="例文(英文（日本語訳）の形)"></textarea>
     <button class="primary" id="add">追加</button>
   </div>
   <ul id="items"></ul>
 </section>
 
 <section id="data" class="panel">
-  <p>CSV(1行に「単語,意味」)で一括追加・書き出しができます。</p>
-  <textarea id="csv" rows="8" placeholder="apple,りんご&#10;book,本"></textarea>
+  <p>CSV(1行に「単語,意味,例文」)で一括追加・書き出しができます。例文は「英文（日本語訳）」の形にすると、訳が別行で表示されます。同じ単語がすでにある場合は、意味と例文を上書きします。</p>
+  <div class="row"><input type="file" id="file" accept=".csv,text/csv,text/plain"></div>
+  <p class="meta">ファイルを選ぶと下の欄に読み込まれます。「取り込む」を押すと追加されます。</p>
+  <textarea id="csv" rows="8" placeholder="apple,りんご,I ate an apple.（りんごを食べました。）"></textarea>
   <div class="row">
     <button id="imp" class="primary">取り込む</button>
     <button id="exp">現在のデータをCSVで表示</button>
@@ -83,6 +91,27 @@ const KEY="tangocho.v1";
 let words=[];try{words=JSON.parse(localStorage.getItem(KEY))||[]}catch(e){}
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(words))}catch(e){}};
 const $=id=>document.getElementById(id);
+const SKEY="tangocho.showEx";
+try{$("showEx").checked=localStorage.getItem(SKEY)!=="0"}catch(e){}
+function splitEx(t){const m=/^(.*?)\s*（(.*)）\s*$/s.exec(t||"");return m?{en:m[1],ja:m[2]}:{en:(t||"").trim(),ja:""}}
+function exBlock(w){
+  if(!$("showEx").checked||!w.example)return null;
+  const {en,ja}=splitEx(w.example),d=document.createElement("div");d.className="ex";
+  const e=document.createElement("div");e.textContent=en;d.append(e);
+  if(ja){const j=document.createElement("div");j.className="ja";j.textContent=ja;d.append(j)}
+  return d;
+}
+function parseCSV(t){
+  const rows=[];let row=[],f="",q=false;
+  for(let i=0;i<t.length;i++){const c=t[i];
+    if(q){if(c=='"'){if(t[i+1]=='"'){f+='"';i++}else q=false}else f+=c}
+    else if(c=='"')q=true;
+    else if(c===","){row.push(f);f=""}
+    else if(c==="\n"){row.push(f);rows.push(row);row=[];f=""}
+    else if(c!=="\r")f+=c}
+  if(f||row.length){row.push(f);rows.push(row)}
+  return rows.filter(r=>r.some(x=>x.trim()));
+}
 let deck=[],idx=0,flipped=false;
 
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
@@ -100,8 +129,11 @@ function renderStudy(){
   const c=$("card"),cur=deck[idx];
   $("stat").textContent=`覚えた ${words.filter(w=>w.known).length} / ${words.length}`;
   if(!cur){c.textContent=words.length?"すべて覚えました 🎉":"単語を追加してください";$("pos").textContent="";return}
+  c.style.flexDirection="column";
   const front=$("reverse").checked?cur.meaning:cur.word,back=$("reverse").checked?cur.word:cur.meaning;
-  c.textContent=flipped?back:front;
+  c.textContent="";
+  const main=document.createElement("div");main.className="mean";main.textContent=flipped?back:front;c.append(main);
+  if(flipped){const x=exBlock(cur);if(x)c.append(x)}
   $("pos").textContent=`${idx+1} / ${deck.length}`;
 }
 function renderList(){
@@ -113,8 +145,9 @@ function renderList(){
     const b=document.createElement("b");b.textContent=w.word;
     const s=document.createElement("small");s.textContent=w.meaning;
     t.append(b,s);
+    const x=exBlock(w);if(x)t.append(x);
     const e=document.createElement("button");e.className="small";e.textContent="編集";
-    e.onclick=()=>{const nw=prompt("単語",w.word);if(nw===null)return;const nm=prompt("意味",w.meaning);if(nm===null)return;w.word=nw.trim()||w.word;w.meaning=nm;save();render()};
+    e.onclick=()=>{const nw=prompt("単語",w.word);if(nw===null)return;const nm=prompt("意味",w.meaning);if(nm===null)return;const ne=prompt("例文(英文（日本語訳）の形)",w.example||"");if(ne===null)return;w.word=nw.trim()||w.word;w.meaning=nm;w.example=ne.trim();save();render()};
     const d=document.createElement("button");d.className="small";d.textContent="削除";
     d.onclick=()=>{if(confirm(`「${w.word}」を削除しますか?`)){words=words.filter(x=>x!==w);save();buildDeck();render()}};
     li.append(t,e,d);ul.append(li);
@@ -131,6 +164,7 @@ function mark(k){const cur=deck[idx];if(!cur)return;cur.known=k;save();
   flipped=false;render()}
 $("ok").onclick=()=>mark(true);
 $("ng").onclick=()=>mark(false);
+$("showEx").onchange=()=>{try{localStorage.setItem(SKEY,$("showEx").checked?"1":"0")}catch(e){}render()};
 $("hideKnown").onchange=()=>{buildDeck();flipped=false;render()};
 $("reverse").onchange=()=>{flipped=false;renderStudy()};
 document.addEventListener("keydown",e=>{
@@ -143,19 +177,23 @@ document.addEventListener("keydown",e=>{
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 $("add").onclick=()=>{
   const w=$("w").value.trim();if(!w)return;
-  words.push({id:uid(),word:w,meaning:$("m").value.trim(),known:false});
-  $("w").value="";$("m").value="";$("w").focus();save();buildDeck();render();
+  words.push({id:uid(),word:w,meaning:$("m").value.trim(),example:$("e").value.trim(),known:false});
+  $("w").value="";$("m").value="";$("e").value="";$("w").focus();save();buildDeck();render();
 };
+$("file").onchange=async e=>{const f=e.target.files[0];if(f)$("csv").value=await f.text()};
 $("imp").onclick=()=>{
-  let n=0;
-  $("csv").value.split(/\r?\n/).forEach(line=>{
-    const i=line.indexOf(",");if(!line.trim())return;
-    const w=(i<0?line:line.slice(0,i)).trim(),m=i<0?"":line.slice(i+1).trim();
-    if(w){words.push({id:uid(),word:w,meaning:m,known:false});n++}
+  let n=0,u=0;const rows=parseCSV($("csv").value.replace(/^\uFEFF/,""));
+  if(rows.length&&/^(英単語|単語|word)$/i.test(rows[0][0].trim()))rows.shift();
+  rows.forEach(r=>{
+    const w=r[0].trim();if(!w)return;
+    const m=(r[1]||"").trim(),ex=(r[2]||"").trim(),old=words.find(x=>x.word===w);
+    if(old){old.meaning=m;old.example=ex;u++}
+    else{words.push({id:uid(),word:w,meaning:m,example:ex,known:false});n++}
   });
-  save();buildDeck();render();$("csv").value="";alert(`${n}件追加しました`);
+  save();buildDeck();render();$("csv").value="";$("file").value="";alert(`${n}件追加、${u}件更新しました`);
 };
-$("exp").onclick=()=>{$("csv").value=words.map(w=>`${w.word},${w.meaning.replace(/\n/g," ")}`).join("\n")};
+const q=v=>/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
+$("exp").onclick=()=>{$("csv").value=words.map(w=>[w.word,w.meaning,w.example||""].map(q).join(",")).join("\n")};
 $("reset").onclick=()=>{if(confirm("すべての単語を削除します。よろしいですか?")){words=[];save();buildDeck();render()}};
 
 buildDeck();render();
