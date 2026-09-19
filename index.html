@@ -215,7 +215,9 @@ function importText(text){
     const h=rows.shift().map(x=>x.trim());
     const f=k=>h.findIndex(x=>x.includes(k));
     ix={w:0,m:1,o:f("その他"),e:f("例文")};
+    if(ix.o<0)ix.o=f("一般");
     if(ix.e<0)ix.e=h.length>=4?3:2;
+    if(ix.o<0&&h.length>=4)ix.o=2;
   }else if(rows.length&&rows[0].length>=4)ix={w:0,m:1,o:2,e:3};
   const g=(r,i)=>i<0?"":(r[i]||"").trim();
   rows.forEach(r=>{
