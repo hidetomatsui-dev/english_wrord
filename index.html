@@ -28,9 +28,11 @@ li .t{flex:1}li .t small{color:var(--muted);display:block}
 li.known .t b{color:var(--ok)}
 .small{padding:4px 8px;font-size:.8rem}
 .ex{margin-top:20px;padding-top:16px;border-top:1px solid var(--line);font-size:1rem;text-align:left;width:100%}
+.other{margin-top:12px;font-size:1rem;text-align:left;width:100%}
 .ex .hl{color:var(--accent);font-weight:600}
 .ex .ja{color:var(--muted);font-size:.9rem;margin-top:4px}
 .card .mean{font-size:1.6rem}
+li .t .other{margin:2px 0 0;font-size:.85rem;color:var(--muted)}
 li .t .ex{border:0;margin:6px 0 0;padding:0;font-size:.85rem}
 .empty{color:var(--muted);text-align:center;padding:32px 0}
 label.chk{display:flex;gap:6px;align-items:center;font-size:.9rem;color:var(--muted)}
@@ -68,6 +70,7 @@ label.chk input{width:auto}
   <div class="form">
     <input id="w" placeholder="単語">
     <textarea id="m" rows="2" placeholder="意味・メモ"></textarea>
+ <textarea id="o" rows="2" placeholder="その他の意味"></textarea>
     <textarea id="e" rows="2" placeholder="例文(英文（日本語訳）の形)"></textarea>
     <button class="primary" id="add">追加</button>
   </div>
@@ -75,10 +78,10 @@ label.chk input{width:auto}
 </section>
 
 <section id="data" class="panel">
-  <p>CSV(1行に「単語,意味,例文」)で一括追加・書き出しができます。例文は「英文（日本語訳）」の形にすると、訳が別行で表示されます。同じ単語がすでにある場合は、意味と例文を上書きします。</p>
+  <p>CSV(1行に「単語,意味,その他の意味,例文」)で一括追加・書き出しができます。例文は「英文（日本語訳）」の形にすると、訳が別行で表示されます。同じ単語がすでにある場合は、意味と例文を上書きします。</p>
   <div class="row"><input type="file" id="file" accept=".csv,text/csv,text/plain"></div>
   <p class="meta">ファイルを選ぶと下の欄に読み込まれます。「取り込む」を押すと追加されます。</p>
-  <textarea id="csv" rows="8" placeholder="apple,りんご,I ate an apple.（りんごを食べました。）"></textarea>
+  <textarea id="csv" rows="8" placeholder="apple,りんご,リンゴ(の木),I ate an apple.（りんごを食べました。）"></textarea>
   <div class="row">
     <button id="imp" class="primary">取り込む</button>
     <button id="exp">現在のデータをCSVで表示</button>
@@ -96,6 +99,10 @@ const $=id=>document.getElementById(id);
 const SKEY="tangocho.showEx";
 try{$("showEx").checked=localStorage.getItem(SKEY)!=="0"}catch(e){}
 function splitEx(t){const m=/^(.*?)\s*（(.*)）\s*$/s.exec(t||"");return m?{en:m[1],ja:m[2]}:{en:(t||"").trim(),ja:""}}
+function otherBlock(w){
+  if(!w.other)return null;
+  const d=document.createElement("div");d.className="other";d.textContent=w.other;return d;
+}
 function exBlock(w){
   if(!$("showEx").checked||!w.example)return null;
   const {en,ja}=splitEx(w.example),d=document.createElement("div");d.className="ex";
@@ -145,7 +152,7 @@ function renderStudy(){
   const front=$("reverse").checked?cur.meaning:cur.word,back=$("reverse").checked?cur.word:cur.meaning;
   c.textContent="";
   const main=document.createElement("div");main.className="mean";main.textContent=flipped?back:front;c.append(main);
-  if(flipped){const x=exBlock(cur);if(x)c.append(x)}
+  if(flipped){const o=otherBlock(cur);if(o)c.append(o);const x=exBlock(cur);if(x)c.append(x)}
   $("pos").textContent=`${idx+1} / ${deck.length}`;
 }
 function renderList(){
@@ -157,9 +164,10 @@ function renderList(){
     const b=document.createElement("b");b.textContent=w.word;
     const s=document.createElement("small");s.textContent=w.meaning;
     t.append(b,s);
+    const o=otherBlock(w);if(o)t.append(o);
     const x=exBlock(w);if(x)t.append(x);
     const e=document.createElement("button");e.className="small";e.textContent="編集";
-    e.onclick=()=>{const nw=prompt("単語",w.word);if(nw===null)return;const nm=prompt("意味",w.meaning);if(nm===null)return;const ne=prompt("例文(英文（日本語訳）の形)",w.example||"");if(ne===null)return;w.word=nw.trim()||w.word;w.meaning=nm;w.example=ne.trim();save();render()};
+    e.onclick=()=>{const nw=prompt("単語",w.word);if(nw===null)return;const nm=prompt("意味",w.meaning);if(nm===null)return;const no=prompt("その他の意味",w.other||"");if(no===null)return;const ne=prompt("例文(英文（日本語訳）の形)",w.example||"");if(ne===null)return;w.word=nw.trim()||w.word;w.meaning=nm;w.other=no.trim();w.example=ne.trim();save();render()};
     const d=document.createElement("button");d.className="small";d.textContent="削除";
     d.onclick=()=>{if(confirm(`「${w.word}」を削除しますか?`)){words=words.filter(x=>x!==w);save();buildDeck();render()}};
     li.append(t,e,d);ul.append(li);
@@ -189,18 +197,25 @@ document.addEventListener("keydown",e=>{
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 $("add").onclick=()=>{
   const w=$("w").value.trim();if(!w)return;
-  words.push({id:uid(),word:w,meaning:$("m").value.trim(),example:$("e").value.trim(),known:false});
-  $("w").value="";$("m").value="";$("e").value="";$("w").focus();save();buildDeck();render();
+  words.push({id:uid(),word:w,meaning:$("m").value.trim(),other:$("o").value.trim(),example:$("e").value.trim(),known:false});
+  $("w").value="";$("m").value="";$("o").value="";$("e").value="";$("w").focus();save();buildDeck();render();
 };
 $("file").onchange=async e=>{const f=e.target.files[0];if(f)$("csv").value=await f.text()};
 function importText(text){
   let n=0,u=0;const rows=parseCSV(text.replace(/^\uFEFF/,""));
-  if(rows.length&&/^(英単語|単語|word)$/i.test(rows[0][0].trim()))rows.shift();
+  let ix={w:0,m:1,o:-1,e:2};
+  if(rows.length&&/^(英単語|単語|word)$/i.test(rows[0][0].trim())){
+    const h=rows.shift().map(x=>x.trim());
+    const f=k=>h.findIndex(x=>x.includes(k));
+    ix={w:0,m:1,o:f("その他"),e:f("例文")};
+    if(ix.e<0)ix.e=h.length>=4?3:2;
+  }else if(rows.length&&rows[0].length>=4)ix={w:0,m:1,o:2,e:3};
+  const g=(r,i)=>i<0?"":(r[i]||"").trim();
   rows.forEach(r=>{
-    const w=r[0].trim();if(!w)return;
-    const m=(r[1]||"").trim(),ex=(r[2]||"").trim(),old=words.find(x=>x.word===w);
-    if(old){old.meaning=m;old.example=ex;u++}
-    else{words.push({id:uid(),word:w,meaning:m,example:ex,known:false});n++}
+    const w=g(r,ix.w);if(!w)return;
+    const m=g(r,ix.m),o=g(r,ix.o),ex=g(r,ix.e),old=words.find(x=>x.word===w);
+    if(old){old.meaning=m;old.other=o;old.example=ex;u++}
+    else{words.push({id:uid(),word:w,meaning:m,other:o,example:ex,known:false});n++}
   });
   save();buildDeck();render();return `${n}件追加、${u}件更新しました`;
 }
@@ -216,7 +231,7 @@ $("builtin").onclick=async()=>{try{alert(await loadBuiltin())}catch(e){alert("�
   try{await loadBuiltin();localStorage.setItem("tangocho.seeded","1")}catch(e){}
 })();
 const q=v=>/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
-$("exp").onclick=()=>{$("csv").value=words.map(w=>[w.word,w.meaning,w.example||""].map(q).join(",")).join("\n")};
+$("exp").onclick=()=>{$("csv").value=words.map(w=>[w.word,w.meaning,w.other||"",w.example||""].map(q).join(",")).join("\n")};
 $("reset").onclick=()=>{if(confirm("すべての単語を削除します。よろしいですか?")){words=[];save();buildDeck();render()}};
 
 buildDeck();render();
