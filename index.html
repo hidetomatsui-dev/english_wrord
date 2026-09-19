@@ -149,10 +149,17 @@ function renderStudy(){
   $("stat").textContent=`覚えた ${words.filter(w=>w.known).length} / ${words.length}`;
   if(!cur){c.textContent=words.length?"すべて覚えました 🎉":"単語を追加してください";$("pos").textContent="";return}
   c.style.flexDirection="column";
-  const front=$("reverse").checked?cur.meaning:cur.word,back=$("reverse").checked?cur.word:cur.meaning;
   c.textContent="";
-  const main=document.createElement("div");main.className="mean";main.textContent=flipped?back:front;c.append(main);
-  if(flipped){const o=otherBlock(cur);if(o)c.append(o);const x=exBlock(cur);if(x)c.append(x)}
+  const add=(txt,cls)=>{const d=document.createElement("div");d.className=cls;d.textContent=txt;c.append(d)};
+  const meanings=()=>{add(cur.meaning,"mean");const o=otherBlock(cur);if(o)c.append(o)};
+  const rev=$("reverse").checked;
+  if(!rev){                       // 単語 → 訳(意味・その他の意味)+例文
+    if(!flipped)add(cur.word,"mean");
+    else{meanings();const x=exBlock(cur);if(x)c.append(x)}
+  }else{                          // 訳(意味・その他の意味) → 単語+例文
+    if(!flipped)meanings();
+    else{add(cur.word,"mean");const x=exBlock(cur);if(x)c.append(x)}
+  }
   $("pos").textContent=`${idx+1} / ${deck.length}`;
 }
 function renderList(){
