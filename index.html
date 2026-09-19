@@ -83,6 +83,7 @@ label.chk input{width:auto}
     <button id="imp" class="primary">取り込む</button>
     <button id="exp">現在のデータをCSVで表示</button>
   </div>
+  <div class="row"><button id="builtin">組み込みの単語帳を読み込む(更新も可)</button></div>
   <div class="row"><button id="reset">すべて削除</button></div>
 </section>
 </main>
@@ -192,8 +193,8 @@ $("add").onclick=()=>{
   $("w").value="";$("m").value="";$("e").value="";$("w").focus();save();buildDeck();render();
 };
 $("file").onchange=async e=>{const f=e.target.files[0];if(f)$("csv").value=await f.text()};
-$("imp").onclick=()=>{
-  let n=0,u=0;const rows=parseCSV($("csv").value.replace(/^\uFEFF/,""));
+function importText(text){
+  let n=0,u=0;const rows=parseCSV(text.replace(/^\uFEFF/,""));
   if(rows.length&&/^(英単語|単語|word)$/i.test(rows[0][0].trim()))rows.shift();
   rows.forEach(r=>{
     const w=r[0].trim();if(!w)return;
@@ -201,8 +202,19 @@ $("imp").onclick=()=>{
     if(old){old.meaning=m;old.example=ex;u++}
     else{words.push({id:uid(),word:w,meaning:m,example:ex,known:false});n++}
   });
-  save();buildDeck();render();$("csv").value="";$("file").value="";alert(`${n}件追加、${u}件更新しました`);
-};
+  save();buildDeck();render();return `${n}件追加、${u}件更新しました`;
+}
+$("imp").onclick=()=>{alert(importText($("csv").value));$("csv").value="";$("file").value=""};
+async function loadBuiltin(){
+  const r=await fetch("words.csv");if(!r.ok)throw new Error(r.status);
+  return importText(await r.text());
+}
+$("builtin").onclick=async()=>{try{alert(await loadBuiltin())}catch(e){alert("組み込み単語帳を読み込めませんでした")}};
+(async()=>{
+  let seeded=false;try{seeded=localStorage.getItem("tangocho.seeded")==="1"}catch(e){}
+  if(seeded)return;
+  try{await loadBuiltin();localStorage.setItem("tangocho.seeded","1")}catch(e){}
+})();
 const q=v=>/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
 $("exp").onclick=()=>{$("csv").value=words.map(w=>[w.word,w.meaning,w.example||""].map(q).join(",")).join("\n")};
 $("reset").onclick=()=>{if(confirm("すべての単語を削除します。よろしいですか?")){words=[];save();buildDeck();render()}};
